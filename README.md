@@ -9,7 +9,7 @@
 
 ## 개요
 
-이 프로젝트는 **역외원화결제(Offshore KRW Clearing)** 를 SWIFT MT 메시지 레벨에서 학습하기 위한 시뮬레이터입니다. 한국은행(BOK) 연동을 전제로 한 실제 업무 프로세스를 모사하며, MT 전문의 파싱/생성/검증부터 결제 플로우 orchestration까지 전 과정을 구현합니다.
+이 프로젝트는 **역외원화결제(Offshore KRW Clearing)** 를 SWIFT MT 메시지 레벨에서 검증하기 위한 시뮬레이터입니다. 한국은행(BOK) 연동을 전제로 한 실제 업무 프로세스를 모사하며, MT 전문의 파싱/생성/검증부터 결제 플로우 orchestration까지 전 과정을 구현합니다.
 
 ## 기술 스택
 
@@ -18,7 +18,7 @@
 | 언어 | Python 3.11+ |
 | 웹 서버 | FastAPI (BOK 모의 게이트웨이) |
 | 대시보드 | Streamlit |
-| DB | SQLite (로컬 실습) |
+| 감사 로그 | In-memory (SHA-256 해시) |
 | 테스트 | pytest (219 tests) |
 | 패키징 | uv + pyproject.toml |
 
