@@ -1,6 +1,7 @@
 from decimal import Decimal
 from datetime import time
 from src.bok_simulator.handlers import BOKMessageHandler
+from src.cutoff.manager import CutOffTimeManager
 
 
 VALID_MT103 = """{1:F01WOOBURKRSAXXX0000000000}
@@ -44,11 +45,17 @@ VALID_MT202 = """{1:F01WOOBURKRSAXXX0000000000}
 
 class TestBOKMessageHandler:
     def setup_method(self):
+        self._orig_offshore = CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_OFFSHORE"]
+        self._orig_domestic = CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_DOMESTIC"]
+        CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_OFFSHORE"] = time(23, 59)
+        CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_DOMESTIC"] = time(23, 59)
         self.handler = BOKMessageHandler()
         self.handler._timeout_probability = 0.0
         self.handler._nostro_balance = Decimal("999999999999")
-        self.handler.cutoff_manager.CUTOFF_TIMES["BOK_KRW_OFFSHORE"] = time(23, 59)
-        self.handler.cutoff_manager.CUTOFF_TIMES["BOK_KRW_DOMESTIC"] = time(23, 59)
+
+    def teardown_method(self):
+        CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_OFFSHORE"] = self._orig_offshore
+        CutOffTimeManager.CUTOFF_TIMES["BOK_KRW_DOMESTIC"] = self._orig_domestic
 
     def test_handle_mt103_valid_returns_accepted(self):
         result = self.handler.handle_mt103(VALID_MT103)
