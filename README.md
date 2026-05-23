@@ -3,7 +3,7 @@
 **SWIFT MT message simulator for offshore Korean Won (KRW) clearing via Bank of Korea (BOK).** Implements MT103/MT202/MT900/MT910/MT940/MT950 parsing, generation, validation, and end-to-end payment flow simulation.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-219%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-219%20passing-brightgreen)](tests/)
 
 ---
 
@@ -121,10 +121,9 @@ RECEIVED → VALIDATED → PROCESSING → PENDING_BOK → SETTLED
 git clone https://github.com/topslee-dev/offshore-krw-clearing.git
 cd offshore-krw-clearing
 
-# 가상환경 생성 및 패키지 설치
+# 가상환경 생성 및 의존성 설치
 uv venv
-uv pip install -e .
-uv pip install fastapi uvicorn streamlit pytest
+uv pip install -e ".[test]"
 
 # 전체 테스트 실행
 uv run pytest tests/ -v
