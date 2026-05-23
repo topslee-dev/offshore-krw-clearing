@@ -1,5 +1,21 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Block1Info:
+    protocol: str = ""
+    session: str = ""
+    sender_bic: str = ""
+    sequence: str = ""
+
+
+@dataclass
+class Block2Info:
+    direction: str = ""
+    mt_type: str = ""
+    receiver_bic: str = ""
+    terminal: str = ""
 
 
 @dataclass
@@ -9,11 +25,12 @@ class ParsedMessage:
     Block 1(Basic Header)부터 Block 5(Trailer)까지의 내용을 각각 보관한다.
     raw_ 접두사가 붙은 필드는 원본 Block 문자열을, 없는 필드는 정제된 내용을 저장한다.
     """
-    # Block 1: Basic Header (필수) — 발신 BIC, 세션번호 등 전송 헤더
     block1: str | None = None
     block1_raw: str | None = None
+    block1_info: Block1Info | None = None
     block2: str | None = None
     block2_raw: str | None = None
+    block2_info: Block2Info | None = None
     block3: str | None = None
     block3_raw: str | None = None
     block4: str | None = None
@@ -23,10 +40,6 @@ class ParsedMessage:
 
     @property
     def is_complete(self) -> bool:
-        """
-        필수 Block(1, 2, 4)이 모두 존재하는지 확인한다.
-        Block 3과 5는 선택 사항이므로 검사하지 않는다.
-        """
         return self.block1 is not None and self.block2 is not None and self.block4 is not None
 
 
@@ -57,13 +70,13 @@ class SWIFTBlockParser:
 
         for block_id, content in blocks:
             if block_id == "1":
-                # Basic Header: {1:F01BIC...}
                 result.block1_raw = f"{{1:{content}}}"
                 result.block1 = self._parse_block1(content)
+                result.block1_info = self._parse_block1_info(content)
             elif block_id == "2":
-                # Application Header: {2:I103BIC...}
                 result.block2_raw = f"{{2:{content}}}"
                 result.block2 = self._parse_block2(content)
+                result.block2_info = self._parse_block2_info(content)
             elif block_id == "3":
                 # User Header: {3:{108:REF...}}
                 result.block3_raw = f"{{3:{content}}}"
@@ -98,14 +111,49 @@ class SWIFTBlockParser:
         return result
 
     def _parse_block1(self, content: str) -> str:
-        """Block 1: Basic Header — 중괄호를 제거하고 내부 문자열만 반환"""
         content = content.strip("{}")
         return content
 
+    def _parse_block1_info(self, content: str) -> Block1Info:
+        raw = content.strip("{}")
+        if len(raw) >= 5:
+            protocol = raw[0:1]
+            session = raw[1:3]
+            rest = raw[3:]
+            sequence_match = re.search(r"(\d{6,})", rest)
+            if sequence_match:
+                bic_part = rest[: sequence_match.start()]
+                sequence = sequence_match.group(1)
+            else:
+                bic_part = rest
+                sequence = ""
+            return Block1Info(
+                protocol=protocol,
+                session=session,
+                sender_bic=bic_part,
+                sequence=sequence,
+            )
+        return Block1Info()
+
     def _parse_block2(self, content: str) -> str:
-        """Block 2: Application Header — 중괄호를 제거하고 내부 문자열만 반환"""
         content = content.strip("{}")
         return content
+
+    def _parse_block2_info(self, content: str) -> Block2Info:
+        raw = content.strip("{}")
+        if len(raw) >= 7:
+            direction = raw[0:1]
+            mt_type = raw[1:4]
+            remaining = raw[4:]
+            terminal = remaining[-3:] if remaining[-3:] in ("XXX", "YYY") else ""
+            receiver_bic = remaining[:-3] if terminal else remaining
+            return Block2Info(
+                direction=direction,
+                mt_type=mt_type,
+                receiver_bic=receiver_bic,
+                terminal=terminal,
+            )
+        return Block2Info()
 
     def _parse_block3(self, content: str) -> str:
         """

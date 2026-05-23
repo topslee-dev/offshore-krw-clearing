@@ -45,16 +45,14 @@ OWP-Simulator/
 │   │   ├── tag_parser.py    # 태그 추출기
 │   │   ├── field_validator.py
 │   │   └── bic_validator.py
-│   ├── builder/             # 전문 생성기
-│   │   ├── __init__.py
-│   │   ├── mt103_builder.py
-│   │   ├── mt202_builder.py
-│   │   ├── mt950_builder.py
-│   │   └── mt9xx_builder.py
-│   ├── validator/           # 유효성 검증
-│   │   ├── __init__.py
-│   │   ├── swift_validator.py
-│   │   └── field_rules.py
+    │   ├── builder/             # 전문 생성기
+    │   │   ├── __init__.py
+    │   │   ├── mt103_builder.py
+    │   │   ├── mt202_builder.py
+    │   │   └── mt9xx_builder.py
+    │   ├── validator/           # 유효성 검증
+    │   │   ├── __init__.py
+    │   │   └── swift_validator.py
 │   ├── flow/               # 결제 플로우
 │   │   ├── __init__.py
 │   │   ├── payment_flow.py

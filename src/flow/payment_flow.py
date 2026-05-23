@@ -9,7 +9,10 @@ from src.builder.mt103_builder import MT103Builder
 from src.builder.mt202_builder import MT202Builder
 from src.builder.mt9xx_builder import MT9xxBuilder
 from src.flow.status_machine import StatusMachine, PaymentStatus
+from src.flow.exchange_processor import ExchangeRateProcessor
+from src.cutoff.manager import CutOffTimeManager
 from src.audit.logger import SWIFTAuditLogger
+from src.bok_simulator.scenarios import ScenarioEngine
 
 
 @dataclass
@@ -17,22 +20,10 @@ class PaymentResult:
     status: PaymentStatus
     all_messages: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class OffshoreKRWPaymentFlow:
-    """
-    역외원화결제 플로우 오케스트레이터.
-    해외 은행의 MT103 송금 수신부터 한국은행 정산까지 전체 프로세스를 처리한다.
-
-    플로우:
-        1. MT103 수신 (RECEIVED)
-        2. 파싱 및 검증 (VALIDATED)
-        3. BOK MT103 통보 (PROCESSING)
-        4. MT900 수신 확인 (PENDING_BOK)
-        5. MT910 전송
-        6. MT202 자금이체
-        7. MT950 잔액 확인 (SETTLED)
-    """
 
     def __init__(self):
         self.block_parser = SWIFTBlockParser()
@@ -42,12 +33,16 @@ class OffshoreKRWPaymentFlow:
         self.mt103_builder = MT103Builder()
         self.mt202_builder = MT202Builder()
         self.mt9xx_builder = MT9xxBuilder()
+        self.exchange_processor = ExchangeRateProcessor()
+        self.cutoff_manager = CutOffTimeManager()
+        self.scenarios = ScenarioEngine()
         self.status = StatusMachine()
         self.audit_logger = SWIFTAuditLogger()
 
     def process(self, incoming_mt103: str) -> PaymentResult:
-        messages = []
-        errors = []
+        messages: list[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         parsed = self.block_parser.parse(incoming_mt103)
         self.status.transition(PaymentStatus.RECEIVED)
@@ -56,27 +51,63 @@ class OffshoreKRWPaymentFlow:
         if not parsed.is_complete:
             self.status.transition(PaymentStatus.ERROR)
             errors.append("Invalid message structure")
-            return PaymentResult(status=PaymentStatus.ERROR, all_messages=messages, errors=errors)
+            return PaymentResult(status=PaymentStatus.ERROR, all_messages=messages, errors=errors, warnings=warnings)
 
         block4 = parsed.block4 or ""
         tags = {t.name: t.value for t in self.tag_parser.extract_tags(block4)}
+
+        if block2_info := parsed.block2_info:
+            bic = block2_info.receiver_bic if block2_info.receiver_bic else block2_info.receiver_bic
+            if bic and not self.bic_validator.validate(bic):
+                self.status.transition(PaymentStatus.ERROR)
+                errors.append(f"Invalid BIC: {bic}")
+                self.scenarios.add_to_repair_queue({
+                    "message": incoming_mt103,
+                    "reason": "INVALID_BIC",
+                    "bic": bic,
+                })
+                return PaymentResult(status=PaymentStatus.ERROR, all_messages=messages, errors=errors, warnings=warnings)
+
+        cutoff = self.cutoff_manager.check_cutoff("BOK_KRW_OFFSHORE")
+        if not cutoff.is_within:
+            warnings.append(
+                f"Cutoff exceeded for BOK_KRW_OFFSHORE. "
+                f"Remaining: {cutoff.remaining_minutes}min. "
+                f"Next value date: {cutoff.next_value_date}"
+            )
 
         validation = self.field_validator.validate_mt103(tags)
         if not validation.is_valid:
             self.status.transition(PaymentStatus.ERROR)
             errors.extend(validation.errors)
-            return PaymentResult(status=PaymentStatus.ERROR, all_messages=messages, errors=errors)
+            for err in validation.errors:
+                self.scenarios.add_to_repair_queue({"message": incoming_mt103, "reason": err})
+            return PaymentResult(status=PaymentStatus.ERROR, all_messages=messages, errors=errors, warnings=warnings)
 
         self.status.transition(PaymentStatus.VALIDATED)
-
         self.status.transition(PaymentStatus.PROCESSING)
+
+        raw_32a = tags.get(":32A:", "999999XXX0")
+        currency = raw_32a[6:9] if len(raw_32a) >= 9 else "KRW"
+        amount = self._extract_amount(raw_32a)
+
+        if currency != "KRW":
+            krw = self.exchange_processor.convert_to_krw(amount, currency, rate_type="FINANCIAL")
+            warnings.append(
+                f"FX conversion: {amount} {currency} → {krw.krw_amount} KRW "
+                f"(rate: {krw.rate}, spread: {krw.spread_applied})"
+            )
+
+        sender_bic = (parsed.block1_info.sender_bic
+                      if parsed.block1_info and parsed.block1_info.sender_bic
+                      else "WOOBURKRSAXXX")
 
         bok_mt103 = self.mt103_builder.build({
             "sender_ref": tags.get(":20:", ""),
-            "value_date": tags.get(":32A:", "999999")[:6],
-            "currency": tags.get(":32A:", "999999XXX")[6:9] if len(tags.get(":32A:", "")) >= 9 else "KRW",
-            "amount": self._extract_amount(tags.get(":32A:", "0")),
-            "sender_bic": parsed.block1[:4] if parsed.block1 else "WOOBURKRSAXXX",
+            "value_date": raw_32a[:6],
+            "currency": currency,
+            "amount": amount,
+            "sender_bic": sender_bic,
             "receiver_bic": "HNBKKRSEXXX",
             "ordering_customer": {
                 "account": tags.get(":50K:", tags.get(":50F:", "")),
@@ -98,9 +129,9 @@ class OffshoreKRWPaymentFlow:
             "reference": mt900_ref,
             "related_ref": tags.get(":20:", ""),
             "account": "1234567890",
-            "value_date": tags.get(":32A:", "999999")[:6],
+            "value_date": raw_32a[:6],
             "currency": "KRW",
-            "amount": self._extract_amount(tags.get(":32A:", "0")),
+            "amount": amount,
         })
         messages.append(mt900)
         self.audit_logger.log_message("INBOUND", "MT900", mt900, "RECEIVED")
@@ -110,9 +141,9 @@ class OffshoreKRWPaymentFlow:
             "reference": mt910_ref,
             "related_ref": tags.get(":20:", ""),
             "account": "1234567890",
-            "value_date": tags.get(":32A:", "999999")[:6],
+            "value_date": raw_32a[:6],
             "currency": "KRW",
-            "amount": self._extract_amount(tags.get(":32A:", "0")),
+            "amount": amount,
         })
         messages.append(mt910)
         self.audit_logger.log_message("OUTBOUND", "MT910", mt910, "SENT")
@@ -120,11 +151,11 @@ class OffshoreKRWPaymentFlow:
         mt202 = self.mt202_builder.build({
             "sender_ref": "COVER-" + tags.get(":20:", ""),
             "related_ref": tags.get(":20:", ""),
-            "value_date": tags.get(":32A:", "999999")[:6],
+            "value_date": raw_32a[:6],
             "currency": "KRW",
-            "amount": self._extract_amount(tags.get(":32A:", "0")),
-            "sender_bic": "WOOBURKRSAXXX",
-            "ordering_institution": "WOOBURKRSAXXX",
+            "amount": amount,
+            "sender_bic": sender_bic,
+            "ordering_institution": sender_bic,
             "beneficiary_institution": "HNBKKRSEXXX",
         })
         messages.append(mt202)
@@ -135,8 +166,8 @@ class OffshoreKRWPaymentFlow:
             "reference": mt950_ref,
             "account": "KRW-NOSTRO-001",
             "sequence": "1/1",
-            "opening_balance": "C" + tags.get(":32A:", "999999")[:6] + "KRW1000000000,",
-            "closing_balance": "C" + tags.get(":32A:", "999999")[:6] + "KRW1050000000,",
+            "opening_balance": "C" + raw_32a[:6] + "KRW1000000000,",
+            "closing_balance": "C" + raw_32a[:6] + "KRW1050000000,",
             "statement_lines": [],
         })
         messages.append(mt950)
@@ -148,6 +179,7 @@ class OffshoreKRWPaymentFlow:
             status=PaymentStatus.SETTLED,
             all_messages=messages,
             errors=[],
+            warnings=warnings,
         )
 
     def _extract_amount(self, tag_32a: str) -> Decimal:

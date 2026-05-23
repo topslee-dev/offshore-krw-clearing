@@ -31,6 +31,5 @@ Thumbs.db
 .ruff_cache/
 
 # Duplicate/legacy files (already in doc/)
-/readme.md
 /가이드.md
 

@@ -242,6 +242,14 @@ credit = {
 mt910 = builder.build_mt910(credit)
 ```
 
+##### `build_mt940(statement_data: dict) -> str`
+
+MT940 (Customer Statement) 을 생성합니다.
+
+##### `build_mt950(statement_data: dict) -> str`
+
+MT950 (Bank Statement) 을 생성합니다.
+
 ---
 
 ## validator 모듈
@@ -284,6 +292,26 @@ result = validator.validate_mt103(parsed)
 ```python
 is_valid = validator.validate_field(":20:", "SENDER-REF-001")
 ```
+
+##### `validate_mt202(message: dict) -> ValidationResult`
+
+MT202 메시지의 필수 필드 및 형식을 검증합니다. 필수 필드: :20:, :21:, :32A:, :52A:, :58A:
+
+##### `validate_mt900(message: dict) -> ValidationResult`
+
+MT900 차변 통보의 필수 필드 및 형식을 검증합니다. 필수 필드: :20:, :21:, :25:, :32A:
+
+##### `validate_mt910(message: dict) -> ValidationResult`
+
+MT910 대변 통보의 필수 필드 및 형식을 검증합니다. 필수 필드: :20:, :21:, :25:, :32A:
+
+##### `validate_mt940(message: dict) -> ValidationResult`
+
+MT940 고객 잔액보고의 필수 필드 및 형식을 검증합니다. 필수 필드: :20:, :25:, :28C:, :60F:, :62F:
+
+##### `validate_mt950(message: dict) -> ValidationResult`
+
+MT950 은행 잔액보고의 필수 필드 및 형식을 검증합니다. 필수 필드: :20:, :25:, :28C:, :60F:, :62F:
 
 ---
 
@@ -349,7 +377,7 @@ current = sm.current_status
 
 #### Methods
 
-##### `transition(event: str) -> PaymentStatus`
+##### `transition(target: PaymentStatus) -> PaymentStatus`
 
 상태 전이를 수행합니다.
 
@@ -358,7 +386,7 @@ new_status = sm.transition("VALIDATE")
 # PaymentStatus.VALIDATED
 ```
 
-##### `can_transition(event: str) -> bool`
+##### `can_transition(target: PaymentStatus) -> bool`
 
 전이 가능 여부를 확인합니다.
 

@@ -94,3 +94,37 @@ class TestSWIFTBlockParser:
         result = self.parser.parse(RAW_MT103)
         assert result.block4_raw.startswith("{4:")
         assert result.block4_raw.endswith("}")
+
+    def test_block1_info_protocol(self):
+        result = self.parser.parse(RAW_MT103)
+        assert result.block1_info is not None
+        assert result.block1_info.protocol == "F"
+
+    def test_block1_info_session(self):
+        result = self.parser.parse(RAW_MT103)
+        assert result.block1_info.session == "01"
+
+    def test_block1_info_sender_bic(self):
+        result = self.parser.parse(RAW_MT103)
+        assert result.block1_info.sender_bic == "WOOBURKRSAXXX"
+
+    def test_block2_info_direction(self):
+        result = self.parser.parse(RAW_MT103)
+        assert result.block2_info is not None
+        assert result.block2_info.direction == "I"
+
+    def test_block2_info_mt_type(self):
+        result = self.parser.parse(RAW_MT103)
+        assert result.block2_info.mt_type == "103"
+
+    def test_block2_info_receiver_bic(self):
+        result = self.parser.parse(RAW_MT103)
+        assert "HNBKKRSE" in result.block2_info.receiver_bic
+
+    def test_block2_info_output_direction(self):
+        result = self.parser.parse(RAW_MT202)
+        assert result.block2_info.direction == "O"
+
+    def test_block2_info_mt202_type(self):
+        result = self.parser.parse(RAW_MT202)
+        assert result.block2_info.mt_type == "202"
