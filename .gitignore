@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.opencode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific - opencode
+.opencode/
+
+# Project specific - test artifacts
+.pytest_cache/
+.ruff_cache/
+
+# Duplicate/legacy files (already in doc/)
+/readme.md
+/가이드.md
+

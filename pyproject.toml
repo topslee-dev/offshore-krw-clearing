@@ -1,0 +1,8 @@
+[project]
+name = "owp-simulator"
+version = "1.0.0"
+description = "SWIFT MT Message Simulator for Offshore KRW Payment"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
