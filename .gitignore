@@ -32,4 +32,6 @@ Thumbs.db
 
 # Duplicate/legacy files (already in doc/)
 /가이드.md
+study/
 
+.opencode
